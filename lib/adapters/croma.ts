@@ -1,41 +1,55 @@
 // ============================================================
-// Croma adapter — fetch via ScraperAPI. Croma's product grid is
-// loaded by a client-side API that resists rendering, so this is
-// best-effort: parse any product tiles present in the HTML, else
-// return [] (the registry falls back gracefully).
+// Croma adapter — Croma's product grid comes from an edge-protected
+// search API (api.croma.com). Direct calls are blocked (Akamai), and
+// the search page HTML is a product-less shell — so we call the real
+// API THROUGH ScraperAPI (residential proxy) with the browser headers
+// it expects (origin/referer). Returns clean product JSON.
 // ============================================================
 
-import type { Candidate } from "../data/../types";
-import { fetchViaScraper } from "../data/scraper";
+import type { Candidate } from "../types";
+
+const KEY = process.env.SCRAPER_API_KEY;
+const TIMEOUT_MS = 40_000;
 
 export async function searchCroma(query: string): Promise<Candidate[]> {
-  const url = `https://www.croma.com/search/?text=${encodeURIComponent(query)}`;
-  // render=false: Croma's client-side grid isn't captured by rendering anyway
-  // (enterprise bot protection), so skip the slow render → fail fast → fallback.
-  const html = await fetchViaScraper(url, false);
+  if (!KEY) return [];
 
-  // product links: /<slug>/p/<digits>
-  const linkRe = /href="(\/[a-z0-9-]+\/p\/\d+)"/gi;
-  const out: Candidate[] = [];
-  const seen = new Set<string>();
-  let m: RegExpExecArray | null;
-  while ((m = linkRe.exec(html)) !== null) {
-    const path = m[1];
-    if (seen.has(path)) continue;
-    seen.add(path);
-    // title: Croma puts it in the slug (…/apple-iphone-15-128gb-black-/p/…)
-    const title = path
-      .split("/p/")[0]
-      .replace(/^\//, "")
-      .replace(/-/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    out.push({
-      title,
-      url: `https://www.croma.com${path}`,
-      inStock: true,
+  const target =
+    `https://api.croma.com/searchservices/v1/search` +
+    `?currentPage=0&query=${encodeURIComponent(query + ":relevance")}` +
+    `&fields=FULL&channel=WEB&channelCode=560078&spellOpt=DEFAULT`;
+
+  const scraperUrl =
+    `https://api.scraperapi.com/?api_key=${KEY}&keep_headers=true` +
+    `&url=${encodeURIComponent(target)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(scraperUrl, {
+      signal: controller.signal,
+      headers: {
+        accept: "application/json",
+        origin: "https://www.croma.com",
+        referer: "https://www.croma.com/",
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      },
     });
-    if (out.length >= 15) break;
+    if (!res.ok) return [];
+    const data = (await res.json()) as { products?: any[] };
+    const products = data.products ?? [];
+
+    return products.slice(0, 40).map((p): Candidate => ({
+      title: p.name ?? "",
+      url: p.url ? `https://www.croma.com${p.url}` : "https://www.croma.com",
+      // a product in the search results is listed; stockFlag=false → out of stock
+      inStock: p.stockFlag !== false && p.plmStatus !== "SOLDOUT",
+      price: p.price?.formattedValue ? String(p.price.formattedValue).replace(/\s/g, "") : undefined,
+    }));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
   }
-  return out;
 }
