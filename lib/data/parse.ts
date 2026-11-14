@@ -51,7 +51,9 @@ export function parseCandidates(markdown: string, platform: Platform): Candidate
     // stock: scan a window around this product; price: from the price map
     const block = markdown.slice(Math.max(0, u.idx - 600), u.idx + 600);
     const inStock = !OUT_OF_STOCK.test(block);
-    const price = priceMap.get(u.url);
+    // price: prefer the price-link map; fall back to the nearest ₹ in the block.
+    const blockPrice = block.match(/₹\s?[\d,]{3,}/)?.[0].replace(/\s/g, "");
+    const price = priceMap.get(u.url) ?? blockPrice;
 
     seen.add(u.url);
     candidates.push({ title, url: u.url, inStock, price });
