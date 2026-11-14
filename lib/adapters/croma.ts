@@ -10,7 +10,9 @@ import { fetchViaScraper } from "../data/scraper";
 
 export async function searchCroma(query: string): Promise<Candidate[]> {
   const url = `https://www.croma.com/search/?text=${encodeURIComponent(query)}`;
-  const html = await fetchViaScraper(url, true);
+  // render=false: Croma's client-side grid isn't captured by rendering anyway
+  // (enterprise bot protection), so skip the slow render → fail fast → fallback.
+  const html = await fetchViaScraper(url, false);
 
   // product links: /<slug>/p/<digits>
   const linkRe = /href="(\/[a-z0-9-]+\/p\/\d+)"/gi;

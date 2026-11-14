@@ -29,7 +29,9 @@ function findProducts(o: unknown): any[] | null {
 export async function searchMyntra(query: string): Promise<Candidate[]> {
   const slug = query.trim().replace(/\s+/g, "-").toLowerCase();
   const url = `https://www.myntra.com/${encodeURIComponent(slug)}`;
-  const html = await fetchViaScraper(url, true);
+  // render=false: the product list is in the raw HTML's window.__myx JSON,
+  // so we skip JS rendering → ~5s instead of ~30-60s.
+  const html = await fetchViaScraper(url, false);
 
   const data = extractJsonAfter(html, "window.__myx");
   const products = data ? findProducts(data) : null;
