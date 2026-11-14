@@ -90,6 +90,12 @@ iPhone 16), a platform's search surfaces the Plus/Pro variants and not the exact
 base model. The matcher then *correctly* returns "not listed" rather than showing a
 different variant — precision over recall, by design.
 
+**Honest limitation — location-specific pricing.** In India, price and stock vary by
+delivery pincode. Croma's API already takes a store/pincode code (currently a default
+Bangalore store); Flipkart/Myntra return default/national pricing here. In production
+I'd thread a single user pincode through every platform so the comparison is
+apples-to-apples for that location.
+
 ---
 
 ## Part 4 — Design choices & trade-offs ⚖️
