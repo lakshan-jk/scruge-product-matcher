@@ -17,7 +17,7 @@ export interface CategoryRule {
 export const CATEGORY_RULES: Record<Category, CategoryRule> = {
   smartphone: {
     platforms: ["flipkart", "croma"],
-    requiredAttributes: ["ram", "storage"],
+    requiredAttributes: ["ram", "storage", "color"],
   },
   television: {
     platforms: ["flipkart", "croma"],

@@ -16,27 +16,39 @@ import { fetchViaScraper, isScraperEnabled, fetchAmazonStructured } from "../dat
 
 const BRANDS = [
   "apple","samsung","oneplus","xiaomi","redmi","realme","vivo","oppo","motorola","nothing","google","iqoo","poco",
-  "nike","adidas","puma","reebok","asics","campus","sparx","bata","woodland","skechers",
+  "nike","adidas","puma","reebok","asics","campus","sparx","bata","woodland","skechers","converse","new balance","fila","crocs",
   "sony","lg","tcl","hisense","mi","oneplus","acer","toshiba",
   "levis","us polo","allen solly","roadster","h&m","puma","nike","adidas","jack & jones","peter england",
 ];
 
-const COLORS = ["black","white","blue","red","green","gray","grey","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream"];
+// Pure footwear/apparel brands — they NEVER make phones or TVs. Used to stop a
+// brand-less shoe title (e.g. "Nike Court Vision Alta") defaulting to smartphone.
+const SPORT_BRANDS = ["nike","adidas","puma","reebok","asics","campus","sparx","bata","woodland","skechers","converse","new balance","fila","crocs"];
 
-function detectCategory(title: string, body: string): Category {
+const COLORS = ["black","white","blue","red","green","gray","grey","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy"];
+
+function detectCategory(title: string, body: string, brand = ""): Category {
   // Prefer the TITLE — the page body has junk (related products, ads)
   // that falsely triggers categories (e.g. "UHD" on a phone page).
   const t = title.toLowerCase();
-  if (/\b(t-?shirt|polo|jersey)\b/.test(t)) return "tshirt";
-  if (/\b(shoe|sneaker|running|trainer)\b/.test(t)) return "sneaker";
-  if (/\b(tv|television|smart tv|led tv|uhd tv|qled)\b/.test(t)) return "television";
-  if (/\b(iphone|galaxy|smartphone|pixel|redmi|oneplus|poco|5g|phone)\b/.test(t)) return "smartphone";
+  const b = brand.toLowerCase();
+  if (/\b(t-?shirt|tee|polo|jersey)\b/.test(t)) return "tshirt";
+  if (/\b(shoe|sneaker|running|trainer|loafer|high-?top|low-?top)\b/.test(t)) return "sneaker";
+  if (/\b(tv|television|smart tv|led tv|uhd|qled|oled|nanocell|bravia)\b/.test(t)) return "television";
+  if (/\b(iphone|galaxy|smartphone|pixel|redmi|oneplus|poco|iqoo|narzo|5g|phone)\b/.test(t)) return "smartphone";
+
+  // No category word in the title, but the BRAND resolves it: a sportswear brand
+  // makes shoes/apparel, never a phone — so never let it fall through to the
+  // smartphone default (which routed shoes to Croma instead of Myntra).
+  if (SPORT_BRANDS.some((x) => b === x || t.includes(x))) {
+    return /\b(shirt|tee|polo|jersey|track|short|hoodie)\b/.test(t) ? "tshirt" : "sneaker";
+  }
 
   // weak fallback on the body only if the title was ambiguous
-  const b = body.toLowerCase();
-  if (/\b(t-?shirt|polo|jersey)\b/.test(b)) return "tshirt";
-  if (/\b(running shoe|sneaker)\b/.test(b)) return "sneaker";
-  if (/\b(television|smart tv|led tv)\b/.test(b)) return "television";
+  const bb = body.toLowerCase();
+  if (/\b(t-?shirt|polo|jersey)\b/.test(bb)) return "tshirt";
+  if (/\b(running shoe|sneaker|footwear)\b/.test(bb)) return "sneaker";
+  if (/\b(television|smart tv|led tv)\b/.test(bb)) return "television";
   return "smartphone";
 }
 
@@ -63,6 +75,8 @@ function detectAttributes(category: Category, text: string): Record<string, stri
     const rom = t.match(/(\d+)\s*(gb|tb)\s*(rom|storage|internal|ssd)/) ?? t.match(/(\d+)\s*(gb|tb)\b/);
     if (ram) attrs.ram = `${ram[1]}GB`;
     if (rom) attrs.storage = `${rom[1]}${rom[2].toUpperCase()}`;
+    const col = COLORS.find((c) => t.includes(c)); // colour is part of a phone's identity too
+    if (col) attrs.color = col;
   } else if (category === "television") {
     const inch = t.match(/(\d{2,3})\s*(?:inch|")/);
     if (inch) attrs.screenSize = `${inch[1]} inch`;
@@ -170,8 +184,15 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // fall back to heuristics if no LLM is configured or it fails.
   const llm = await llmExtract(title, body);
 
-  const category = llm ? llm.category : detectCategory(title, body);
   const brand = llm ? llm.brand : detectBrand(title);
+  let category = llm ? llm.category : detectCategory(title, body, brand);
+  // Guard: footwear/apparel brands don't make phones or TVs. If the LLM mislabels
+  // a Nike/adidas/Skechers product as a phone (→ wrong store searched), trust the
+  // keyword heuristic instead. Fixes the "searched Croma for a shoe" errors.
+  if (llm && (category === "smartphone" || category === "television")) {
+    const heuristic = detectCategory(title, body, brand);
+    if (heuristic === "sneaker" || heuristic === "tshirt") category = heuristic;
+  }
   const model = llm ? llm.model : detectModel(title, brand);
   // Attributes from the TITLE only — the page body has noise (e.g. "iCloud 50 GB")
   // that produces WRONG attributes → false variant-mismatches. Empty is safe.

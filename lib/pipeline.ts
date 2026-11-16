@@ -29,8 +29,9 @@ async function resolvePlatform(
       return { platform, status: "not_listed", reason: "no candidates found" };
     }
 
-    // Stage 2a: rule-based scoring ranks the candidates (cheap filter)
-    const match = bestMatch(identity, candidates);
+    // Stage 2a: rule-based scoring ranks the candidates (cheap filter),
+    // with semantic (embedding) rescue when the lexical path misses.
+    const match = await bestMatch(identity, candidates);
     if (!match || match.confidence < MATCH_THRESHOLD) {
       return {
         platform,
