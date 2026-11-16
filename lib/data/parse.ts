@@ -20,13 +20,24 @@ const PRODUCT_URL: Record<Platform, RegExp> = {
 
 const OUT_OF_STOCK = /(currently unavailable|sold out|out of stock|coming soon|notify me)/i;
 
+  // Stable product id for joining prices to products. Flipkart/Croma/Myntra all
+  // repeat the same product under different query strings (?pid, ?lid, srno…), so
+  // keying on the base URL misses prices. The id in the path is stable:
+  //   flipkart …/p/itm1740e69…   croma …/p/323239   myntra …/12027432/buy
+  const idOf = (url: string): string =>
+    url.match(/\/p\/(itm[0-9a-z]+)/i)?.[1] ??
+    url.match(/\/p\/(\d+)/)?.[1] ??
+    url.match(/\/(\d{5,})\/buy/)?.[1] ??
+    url.split("?")[0];
+
 export function parseCandidates(markdown: string, platform: Platform): Candidate[] {
-  // Price map: the site renders the price as its own link to the SAME product URL,
-  // e.g. [₹4,895](…/p/itm…). Map product URL → price so we never miss it.
+  // Price map: the site renders the price as its own link to the product,
+  // e.g. [₹4,895](…/p/itm…). Key on the stable product id so variant query
+  // strings don't break the join.
   const priceMap = new Map<string, string>();
   for (const m of markdown.matchAll(/\[\s*(₹\s?[\d,]+)\s*\]\((https?:\/\/[^)]+)\)/g)) {
-    const url = m[2].split("?")[0];
-    if (!priceMap.has(url)) priceMap.set(url, m[1].replace(/\s/g, ""));
+    const id = idOf(m[2]);
+    if (!priceMap.has(id)) priceMap.set(id, m[1].replace(/\s/g, ""));
   }
 
   // all product URLs with their position
@@ -49,11 +60,11 @@ export function parseCandidates(markdown: string, platform: Platform): Candidate
     if (title.length < 4) continue;
 
     // stock: scan a window around this product; price: from the price map
-    const block = markdown.slice(Math.max(0, u.idx - 600), u.idx + 600);
+    const block = markdown.slice(Math.max(0, u.idx - 1000), u.idx + 1000);
     const inStock = !OUT_OF_STOCK.test(block);
-    // price: prefer the price-link map; fall back to the nearest ₹ in the block.
+    // price: prefer the price-link map (by stable id); fall back to nearest ₹.
     const blockPrice = block.match(/₹\s?[\d,]{3,}/)?.[0].replace(/\s/g, "");
-    const price = priceMap.get(u.url) ?? blockPrice;
+    const price = priceMap.get(idOf(u.url)) ?? blockPrice;
 
     seen.add(u.url);
     candidates.push({ title, url: u.url, inStock, price });

@@ -59,6 +59,17 @@ function detectBrand(title: string): string {
   return title.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Strip Amazon marketplace boilerplate from a title for clean display. */
+function sanitizeTitle(t: string): string {
+  return t
+    .replace(/\s*[:|-]\s*amazon\.in.*$/i, "")   // " : Amazon.in: Sports, Fitness & Outdoors"
+    .replace(/\s*\|\s*amazon.*$/i, "")           // " | Amazon …"
+    .replace(/^buy\s+/i, "")                      // "Buy …" SEO prefix
+    .replace(/\s+online\s+at\s+.*/i, "")         // "… online at low prices in India"
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function detectModel(title: string, brand: string): string {
   // take the part before the first "(", drop the brand word
   let m = title.split("(")[0];
@@ -212,5 +223,5 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // but the actual product price repeats the most → pick the MOST FREQUENT.
   const price = srcPrice ?? extractAmazonPrice(body);
 
-  return { brand, model, category, attributes, title, sourceUrl: url, price, searchQuery };
+  return { brand, model, category, attributes, title: sanitizeTitle(title), sourceUrl: url, price, searchQuery };
 }
