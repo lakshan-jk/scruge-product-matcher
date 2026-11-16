@@ -29,6 +29,18 @@ import {
 } from "./normalize";
 import { isEmbedEnabled, embedTexts, cosine } from "./embed";
 
+// Generic descriptor words that bloat a model name and crush containment
+// ("teamLIGA Regular Fit Football Jersey" vs "Puma teamLIGA Jersey"). We match
+// on the DISTINCTIVE tokens and ignore these; brand + variant guards still hold.
+const MODEL_STOPWORDS = new Set([
+  "regular","slim","fit","classic","cotton","solid","premium","soft","running",
+  "football","basketball","sports","sport","casual","casuals","jersey","tshirt",
+  "shirt","tee","polo","shoe","shoes","sneaker","sneakers","men","women","mens",
+  "womens","unisex","boys","girls","kids","printed","round","neck","half","full",
+  "sleeve","sleeves","short","shorts","set","pack","with","for","the","and","size",
+  "edition","ultra","smart","led","series","hd","uhd","inch","cm",
+]);
+
 // Primary colour vocabulary — shared by candidate parsing and overlap scoring.
 const PRIMARY_COLORS = ["black","white","blue","red","green","gray","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy","cognac","tan","khaki","olive","charcoal","ivory","sand","wine","rust","mustard","coral","rose"];
 
@@ -186,9 +198,12 @@ export function scoreCandidate(
     return { candidate: c, confidence: 0, reason: `brand "${target.brand}" not found` };
   }
 
-  // --- model: is the model name CONTAINED in the candidate title? ---
-  // (containment, not Jaccard — extra words in the title shouldn't dilute it)
-  const modelScore = tokenContainment(tokens(target.model), candTitleTokens);
+  // --- model: are the DISTINCTIVE model tokens present in the candidate? ---
+  // Drop generic descriptors so a verbose Amazon model ("teamLIGA Regular Fit
+  // Football Jersey") still matches a terse store title ("Puma teamLIGA Jersey").
+  const modelToks = tokens(target.model);
+  const coreToks = new Set([...modelToks].filter((t) => !MODEL_STOPWORDS.has(t)));
+  const modelScore = tokenContainment(coreToks.size ? coreToks : modelToks, candTitleTokens);
   if (modelScore < 0.6) {
     return { candidate: c, confidence: 0, reason: `model "${target.model}" doesn't match` };
   }
