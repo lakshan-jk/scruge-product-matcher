@@ -19,6 +19,10 @@ export const CATEGORY_RULES: Record<Category, CategoryRule> = {
     platforms: ["flipkart", "croma"],
     requiredAttributes: ["ram", "storage", "color"],
   },
+  laptop: {
+    platforms: ["flipkart", "croma"],
+    requiredAttributes: ["ram", "storage"],
+  },
   television: {
     platforms: ["flipkart", "croma"],
     requiredAttributes: ["screenSize"],

@@ -80,6 +80,7 @@ export async function llmExtract(title: string, body: string): Promise<LLMExtrac
 
 function normalizeCategory(c: unknown): Category {
   const s = String(c).toLowerCase();
+  if (s.includes("laptop") || s.includes("macbook") || s.includes("notebook")) return "laptop";
   if (s.includes("tv") || s.includes("televis")) return "television";
   if (s.includes("sneaker") || s.includes("shoe")) return "sneaker";
   if (s.includes("shirt") || s.includes("polo") || s.includes("jersey")) return "tshirt";

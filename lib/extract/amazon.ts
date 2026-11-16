@@ -34,6 +34,7 @@ function detectCategory(title: string, body: string, brand = ""): Category {
   const b = brand.toLowerCase();
   if (/\b(t-?shirt|tee|polo|jersey)\b/.test(t)) return "tshirt";
   if (/\b(shoe|sneaker|running|trainer|loafer|high-?top|low-?top)\b/.test(t)) return "sneaker";
+  if (/\b(laptop|macbook|notebook|chromebook|thinkpad|ideapad|zenbook|vivobook|ultrabook)\b/.test(t)) return "laptop";
   if (/\b(tv|television|smart tv|led tv|uhd|qled|oled|nanocell|bravia)\b/.test(t)) return "television";
   if (/\b(iphone|galaxy|smartphone|pixel|redmi|oneplus|poco|iqoo|narzo|5g|phone)\b/.test(t)) return "smartphone";
 
@@ -93,12 +94,12 @@ function detectModel(title: string, brand: string): string {
 function detectAttributes(category: Category, text: string): Record<string, string> {
   const t = text.toLowerCase();
   const attrs: Record<string, string> = {};
-  if (category === "smartphone") {
+  if (category === "smartphone" || category === "laptop") {
     const ram = t.match(/(\d+)\s*gb\s*ram/) ?? t.match(/(\d+)\s*gb\b(?=.*ram)/);
     const rom = t.match(/(\d+)\s*(gb|tb)\s*(rom|storage|internal|ssd)/) ?? t.match(/(\d+)\s*(gb|tb)\b/);
     if (ram) attrs.ram = `${ram[1]}GB`;
     if (rom) attrs.storage = `${rom[1]}${rom[2].toUpperCase()}`;
-    const col = COLORS.find((c) => t.includes(c)); // colour is part of a phone's identity too
+    const col = COLORS.find((c) => t.includes(c));
     if (col) attrs.color = col;
   } else if (category === "television") {
     const inch = t.match(/(\d{2,3})\s*(?:inch|")/);
@@ -259,9 +260,13 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // Guard: footwear/apparel brands don't make phones or TVs. If the LLM mislabels
   // a Nike/adidas/Skechers product as a phone (→ wrong store searched), trust the
   // keyword heuristic instead. Fixes the "searched Croma for a shoe" errors.
-  if (llm && (category === "smartphone" || category === "television")) {
+  if (llm) {
     const heuristic = detectCategory(title, body, brand);
-    if (heuristic === "sneaker" || heuristic === "tshirt") category = heuristic;
+    if ((category === "smartphone" || category === "television") && (heuristic === "sneaker" || heuristic === "tshirt")) {
+      category = heuristic;
+    }
+    // A MacBook/laptop misread as a phone → trust the laptop keyword.
+    if (heuristic === "laptop" && category !== "laptop") category = "laptop";
   }
   // Attributes from the TITLE only — the page body has noise (e.g. "iCloud 50 GB")
   // that produces WRONG attributes → false variant-mismatches. Empty is safe.
@@ -279,10 +284,9 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
     const m = title.match(/(\d{2,3})\s*(?:inch|")/i);
     if (m) attributes.screenSize = `${m[1]} inch`;
   }
-  // Phones: the LLM often omits RAM, leaving the variant only partly verified
-  // ("1 attr unverified"). Backfill RAM from the title so the exact variant
-  // (RAM + storage + colour) is fully confirmed when present.
-  if (category === "smartphone" && !attributes.ram) {
+  // Phones/laptops: the LLM often omits RAM, leaving the variant only partly
+  // verified. Backfill RAM from the title so the exact variant is confirmed.
+  if ((category === "smartphone" || category === "laptop") && !attributes.ram) {
     const m = title.match(/(\d+)\s*gb\s*ram/i);
     if (m) attributes.ram = `${m[1]}GB`;
   }

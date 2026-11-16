@@ -153,6 +153,7 @@ function brandOk(target: ProductIdentity, candTitleTokens: Set<string>): boolean
 // store titles) are enforced-if-present but NOT required to "confirm" the variant.
 const PRIMARY_ATTRS: Record<Category, string[]> = {
   smartphone: ["storage", "color"],
+  laptop: ["ram", "storage"],
   television: ["screenSize"],
   sneaker: ["color"],
   tshirt: ["color"],
@@ -240,6 +241,7 @@ export function scoreCandidate(
   // code instead, so they use an empty tier set.
   const TIER_WORDS: Record<Category, string[]> = {
     smartphone: ["pro", "max", "plus", "ultra", "mini", "lite", "se", "neo", "prime", "air", "fe"],
+    laptop: ["pro", "max", "air"], // MacBook Air vs Pro; "max" for M-chip tiers
     television: [],
     sneaker: [],
     tshirt: [],

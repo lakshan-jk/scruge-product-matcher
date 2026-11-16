@@ -4,7 +4,7 @@
 // match → decide) speaks the same language.
 // ============================================================
 
-export type Category = "smartphone" | "television" | "sneaker" | "tshirt";
+export type Category = "smartphone" | "laptop" | "television" | "sneaker" | "tshirt";
 
 export type Platform = "flipkart" | "croma" | "myntra";
 
