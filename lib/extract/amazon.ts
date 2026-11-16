@@ -268,6 +268,12 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
     // A MacBook/laptop misread as a phone → trust the laptop keyword.
     if (heuristic === "laptop" && category !== "laptop") category = "laptop";
   }
+  // Laptops: the screen size often rides inside the model ("MacBook Neo 13") but
+  // is absent from store titles, so requiring "13" wrongly rejects them. Pull it
+  // out of the model (it isn't a model identifier) so matching works.
+  if (category === "laptop") {
+    model = model.replace(/\b1[0-8]\b(?:\s*inch|"|”)?/i, "").replace(/\s+/g, " ").trim();
+  }
   // Attributes from the TITLE only — the page body has noise (e.g. "iCloud 50 GB")
   // that produces WRONG attributes → false variant-mismatches. Empty is safe.
   // Keep only attributes that actually appear in the title. A small LLM can
