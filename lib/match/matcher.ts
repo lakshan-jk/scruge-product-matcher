@@ -242,7 +242,9 @@ export function scoreCandidate(
   // code instead, so they use an empty tier set.
   const TIER_WORDS: Record<Category, string[]> = {
     smartphone: ["pro", "max", "plus", "ultra", "mini", "lite", "se", "neo", "prime", "air", "fe"],
-    laptop: ["pro", "max", "air"], // MacBook Air vs Pro; "max" for M-chip tiers
+    laptop: ["air"], // "Air" is a real tier; "pro"/"max" collide with chip names
+    // (e.g. "A18 Pro") — the model name words (Neo/Pro/Air) are enforced by
+    // containment instead, so dropping them avoids false "different tier" rejects.
     television: [],
     sneaker: [],
     tshirt: [],
