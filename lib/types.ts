@@ -52,6 +52,10 @@ export interface PlatformResult {
   price?: string;          // the matched listing's price
   confidence?: number;     // 0..1 — how sure we are it's the same product
   reason?: string;         // short human explanation (why matched / why not)
+  // false when the model matched but a required variant attr (colour/size/RAM)
+  // could NOT be confirmed — so stock is for the MODEL, not necessarily the
+  // exact variant the user searched. The UI shows a caveat in that case.
+  variantConfirmed?: boolean;
 }
 
 /** The full response the API returns. */

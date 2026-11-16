@@ -8,7 +8,10 @@
 // ============================================================
 
 const API_KEY = process.env.SCRAPER_API_KEY;
-const TIMEOUT_MS = 70_000;
+// Must stay UNDER the route's maxDuration (60s) so a slow scrape aborts
+// cleanly and degrades to "not listed" instead of the whole function being
+// killed mid-request (which would surface as a 500/504).
+const TIMEOUT_MS = 50_000;
 const cache = new Map<string, string>();
 
 export function isScraperEnabled(): boolean {

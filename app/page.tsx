@@ -143,6 +143,12 @@ export default function Home() {
                     {r.matchedTitle && (
                       <p className="mt-1 text-sm text-[#5a4a3d]">{r.matchedTitle}</p>
                     )}
+                    {r.status !== "not_listed" && r.variantConfirmed === false && (
+                      <p className="mt-1 rounded-md bg-amber-100/70 px-2 py-1 text-xs text-amber-800">
+                        ⚠ Same model, but the exact variant (e.g. colour/size) couldn’t be
+                        confirmed — stock may be for a different variant.
+                      </p>
+                    )}
                     {r.url && (
                       <a href={r.url} target="_blank" rel="noreferrer"
                          className="mt-1 inline-block text-sm text-[#b5651d] underline">

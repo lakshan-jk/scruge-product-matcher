@@ -65,8 +65,13 @@ export function cacheSet(key: string, value: unknown, ttlMs = DEFAULT_TTL_MS): v
   persist();
 }
 
-/** Key by Amazon ASIN so different URL formats of the same product share a cache entry. */
+/**
+ * Key by Amazon ASIN so different URL formats of the same product share an
+ * entry — but SCOPED BY TLD, because the same ASIN on amazon.in vs amazon.com
+ * is a different market (different price/stock) and must not collide.
+ */
 export function cacheKeyForAmazon(url: string): string {
+  const tld = url.match(/amazon\.([a-z.]+?)(?:[/:?]|$)/i)?.[1].toLowerCase() ?? "in";
   const asin = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
-  return asin ? `asin:${asin[1].toUpperCase()}` : `url:${url.split("?")[0].toLowerCase()}`;
+  return asin ? `asin:${tld}:${asin[1].toUpperCase()}` : `url:${url.split("?")[0].toLowerCase()}`;
 }

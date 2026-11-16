@@ -30,12 +30,15 @@ import {
 import { isEmbedEnabled, embedTexts, cosine } from "./embed";
 
 // Primary colour vocabulary — shared by candidate parsing and overlap scoring.
-const PRIMARY_COLORS = ["black","white","blue","red","green","gray","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy"];
+const PRIMARY_COLORS = ["black","white","blue","red","green","gray","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy","cognac","tan","khaki","olive","charcoal","ivory","sand","wine","rust","mustard","coral","rose"];
 
 export interface MatchScore {
   candidate: Candidate;
   confidence: number; // 0..1
   reason: string;
+  // true only when ALL required variant attrs (colour/size/RAM) were verified.
+  // false → model matched but the exact variant (e.g. colour) is unconfirmed.
+  variantConfirmed?: boolean;
 }
 
 /**
@@ -166,11 +169,12 @@ export function scoreCandidate(
   const attrScore = required.length === 0 ? 1 : (v.known === 0 ? 0.5 : v.matched / v.known);
   const confidence = Number((0.25 + 0.4 * modelScore + 0.35 * attrScore).toFixed(2));
 
-  const reason = v.known < required.length
-    ? `brand+model match; ${required.length - v.known} attr(s) unverified`
-    : `brand, model and all required attributes match`;
+  const variantConfirmed = required.length === 0 || v.known === required.length;
+  const reason = variantConfirmed
+    ? `brand, model and all required attributes match`
+    : `brand+model match; ${required.length - v.known} attr(s) unverified`;
 
-  return { candidate: c, confidence: Math.min(confidence, 1), reason };
+  return { candidate: c, confidence: Math.min(confidence, 1), reason, variantConfirmed };
 }
 
 /** Do two colour strings share a primary colour? (lenient — for multi-colourways) */
@@ -216,11 +220,16 @@ async function semanticRescue(
   const v = variantCheck(target, chosen);
   if (!v.ok) return null;
 
+  const requiredLen = CATEGORY_RULES[target.category].requiredAttributes.length;
+  const variantConfirmed = requiredLen === 0 || v.known === requiredLen;
   const confidence = Number(Math.min(0.6 + 0.4 * bestSim, 0.95).toFixed(2));
   return {
     candidate: chosen,
     confidence,
-    reason: `semantic match (cosine ${bestSim.toFixed(2)}); brand + variants verified`,
+    reason: variantConfirmed
+      ? `semantic match (cosine ${bestSim.toFixed(2)}); brand + variants verified`
+      : `semantic match (cosine ${bestSim.toFixed(2)}); variant (e.g. colour) unconfirmed`,
+    variantConfirmed,
   };
 }
 

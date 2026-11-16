@@ -25,7 +25,7 @@ const BRANDS = [
 // brand-less shoe title (e.g. "Nike Court Vision Alta") defaulting to smartphone.
 const SPORT_BRANDS = ["nike","adidas","puma","reebok","asics","campus","sparx","bata","woodland","skechers","converse","new balance","fila","crocs"];
 
-const COLORS = ["black","white","blue","red","green","gray","grey","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy"];
+const COLORS = ["black","white","blue","red","green","gray","grey","silver","gold","pink","yellow","purple","brown","beige","navy","teal","maroon","orange","cream","burgundy","cognac","tan","khaki","olive","charcoal","ivory","sand","wine","rust","mustard","coral","rose"];
 
 function detectCategory(title: string, body: string, brand = ""): Category {
   // Prefer the TITLE — the page body has junk (related products, ads)

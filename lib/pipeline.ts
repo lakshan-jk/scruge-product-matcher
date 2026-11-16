@@ -66,6 +66,7 @@ async function resolvePlatform(
       price: match.candidate.price,
       confidence,
       reason,
+      variantConfirmed: match.variantConfirmed,
     };
   } catch (err) {
     // Graceful degradation: a platform failing shouldn't sink the request.

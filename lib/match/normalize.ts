@@ -31,11 +31,16 @@ export function normalizeScreenSize(s: string): string {
   return n ? n[0] : normalizeText(s);
 }
 
-/** map common colour variants to a canonical token. */
+/** map common colour variants + fashion colour names to a canonical token. */
 const COLOR_ALIASES: Record<string, string> = {
-  grey: "gray", silver: "gray", space: "gray",
+  grey: "gray", silver: "gray", space: "gray", charcoal: "gray",
   jetblack: "black", midnight: "black",
   navy: "blue", teal: "blue",
+  // fashion/marketing colour names → base colour (so variant matching works)
+  cognac: "brown", tan: "brown", khaki: "brown", coffee: "brown",
+  sand: "beige", nude: "beige", ivory: "white", sail: "white", cream: "white",
+  olive: "green", wine: "maroon", burgundy: "maroon", rust: "orange",
+  mustard: "yellow", coral: "red", rose: "pink",
 };
 export function normalizeColor(s: string): string {
   const t = normalizeText(s).replace(/\s+/g, "");
