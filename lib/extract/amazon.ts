@@ -59,6 +59,17 @@ function detectBrand(title: string): string {
   return title.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Clean Amazon's byline brand: "Visit the PUMA Store" → "PUMA". */
+function cleanBrand(b?: string): string {
+  if (!b) return "";
+  return b
+    .replace(/^visit\s+the\s+/i, "")
+    .replace(/['’]s\s+store\s*$/i, "")
+    .replace(/\s+store\s*$/i, "")
+    .replace(/^brand:\s*/i, "")
+    .trim();
+}
+
 /** Strip Amazon marketplace boilerplate from a title for clean display. */
 function sanitizeTitle(t: string): string {
   return t
@@ -112,7 +123,7 @@ function amazonTitleFromHtml(html: string): string {
 
 /** Fetch Amazon product data: ScraperAPI STRUCTURED endpoint (clean name + price +
  *  stock as JSON) → raw HTML → Jina. First that returns a good title wins. */
-async function fetchAmazon(url: string): Promise<{ title: string; body: string; price?: string }> {
+async function fetchAmazon(url: string): Promise<{ title: string; body: string; price?: string; brand?: string }> {
   const asin = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i)?.[1];
 
   // 1. Structured endpoint — cleanest: name, pricing, specs, availability.
@@ -123,7 +134,10 @@ async function fetchAmazon(url: string): Promise<{ title: string; body: string; 
       const bullets = Array.isArray(p?.feature_bullets) ? p!.feature_bullets.join(" ") : "";
       const info = p?.product_information ? JSON.stringify(p.product_information) : "";
       const price = typeof p?.pricing === "string" ? p.pricing.replace(/\s/g, "") : undefined;
-      return { title: name, body: `${name}\n${bullets}\n${info}`, price };
+      // Amazon's byline brand, e.g. "Visit the PUMA Store" — authoritative even
+      // when the brand name is absent from the product title.
+      const brand = typeof p?.brand === "string" ? p.brand : undefined;
+      return { title: name, body: `${name}\n${bullets}\n${info}`, price, brand };
     }
   }
 
@@ -189,7 +203,7 @@ function extractAmazonPrice(text: string): string | undefined {
 export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // Jina first (free); ScraperAPI fallback if Jina is blocked/503'd. Throws a
   // clear message if both fail — better than matching a garbage error page.
-  const { title, body, price: srcPrice } = await fetchAmazon(url);
+  const { title, body, price: srcPrice, brand: srcBrandRaw } = await fetchAmazon(url);
 
   // Prefer the LLM for clean extraction (handles messy SEO titles);
   // fall back to heuristics if no LLM is configured or it fails.
@@ -197,15 +211,21 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
 
   let brand = llm ? llm.brand : detectBrand(title);
   let model = llm ? llm.model : detectModel(title, brand);
-  // Brand sanity: the LLM sometimes grabs the model as the brand (e.g.
-  // "teamLIGA" instead of "Puma"). If its brand isn't a known brand but a known
-  // one appears AS A WORD in the title, use that and fold the mislabel back into
-  // the model so the distinctive token (teamLIGA) isn't lost from the search.
-  if (llm) {
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9&]/g, ""); // "Levi's"->"levis"
+
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9&]/g, ""); // "Levi's"->"levis"
+  const srcBrand = cleanBrand(srcBrandRaw);
+  if (srcBrand && srcBrand.length <= 25 && /[a-z]/i.test(srcBrand) && norm(srcBrand) !== norm(brand)) {
+    // Amazon's own brand is authoritative. When it differs from what we
+    // extracted (e.g. "Puma" vs the LLM's "teamLIGA"), fold the mislabel back
+    // into the model so its distinctive token survives, then trust Amazon.
+    model = `${brand} ${model}`.trim();
+    brand = srcBrand;
+  } else if (llm) {
+    // Fallback (no structured brand, e.g. Jina path): the LLM sometimes grabs
+    // the model as the brand. If its brand isn't known but a known one appears
+    // AS A WORD in the title, use that and fold the mislabel into the model.
     const brandKnown = BRANDS.some((b) => norm(b) === norm(brand));
     if (!brandKnown) {
-      // whole-word match only — avoids "mi" matching inside "premium".
       const known = BRANDS.find((b) =>
         new RegExp(`(^|[^a-z0-9])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i").test(title)
       );
