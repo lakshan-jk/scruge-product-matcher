@@ -59,14 +59,15 @@ function detectBrand(title: string): string {
   return title.trim().split(/\s+/)[0] ?? "";
 }
 
-/** Clean Amazon's byline brand: "Visit the PUMA Store" → "PUMA". */
+/** Clean Amazon's byline brand: "Visit the PUMA Store" → "PUMA",
+ *  "Visit the Levi's Store" → "Levis" (apostrophe dropped for token matching). */
 function cleanBrand(b?: string): string {
   if (!b) return "";
   return b
     .replace(/^visit\s+the\s+/i, "")
-    .replace(/['’]s\s+store\s*$/i, "")
     .replace(/\s+store\s*$/i, "")
     .replace(/^brand:\s*/i, "")
+    .replace(/['’]/g, "")
     .trim();
 }
 
@@ -214,11 +215,12 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
 
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9&]/g, ""); // "Levi's"->"levis"
   const srcBrand = cleanBrand(srcBrandRaw);
-  if (srcBrand && srcBrand.length <= 25 && /[a-z]/i.test(srcBrand) && norm(srcBrand) !== norm(brand)) {
+  if (srcBrand && srcBrand.length <= 25 && /[a-z]/i.test(srcBrand)) {
     // Amazon's own brand is authoritative. When it differs from what we
     // extracted (e.g. "Puma" vs the LLM's "teamLIGA"), fold the mislabel back
-    // into the model so its distinctive token survives, then trust Amazon.
-    model = `${brand} ${model}`.trim();
+    // into the model so its distinctive token survives. Always adopt Amazon's
+    // (cleaned, apostrophe-free) brand so tokens match store listings.
+    if (norm(srcBrand) !== norm(brand)) model = `${brand} ${model}`.trim();
     brand = srcBrand;
   } else if (llm) {
     // Fallback (no structured brand, e.g. Jina path): the LLM sometimes grabs
