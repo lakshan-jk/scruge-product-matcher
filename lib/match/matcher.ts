@@ -39,6 +39,7 @@ const MODEL_STOPWORDS = new Set([
   "womens","unisex","boys","girls","kids","printed","round","neck","half","full",
   "sleeve","sleeves","short","shorts","set","pack","with","for","the","and","size",
   "edition","ultra","smart","led","series","hd","uhd","inch","cm",
+  "laptop","notebook","chromebook","ultrabook","mobile","wifi", // device words vary by store
 ]);
 
 // Primary colour vocabulary — shared by candidate parsing and overlap scoring.

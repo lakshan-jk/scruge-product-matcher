@@ -284,10 +284,15 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
     const m = title.match(/(\d{2,3})\s*(?:inch|")/i);
     if (m) attributes.screenSize = `${m[1]} inch`;
   }
+  // Normalize synonym attribute keys the LLM may use ("memory" → "ram").
+  if (!attributes.ram && attributes.memory) {
+    attributes.ram = attributes.memory;
+    delete attributes.memory;
+  }
   // Phones/laptops: the LLM often omits RAM, leaving the variant only partly
   // verified. Backfill RAM from the title so the exact variant is confirmed.
   if ((category === "smartphone" || category === "laptop") && !attributes.ram) {
-    const m = title.match(/(\d+)\s*gb\s*ram/i);
+    const m = title.match(/(\d+)\s*gb\s*ram/i) ?? title.match(/(\d+)\s*gb\s*(?:unified\s*)?memory/i);
     if (m) attributes.ram = `${m[1]}GB`;
   }
   // Query = brand + model (model is LLM-cleaned). We DON'T append the variant
