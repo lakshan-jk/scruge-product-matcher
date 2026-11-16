@@ -59,8 +59,9 @@ export default function Home() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && run()}
+            disabled={loading}
             placeholder="https://www.amazon.in/dp/..."
-            className="flex-1 rounded-lg border border-[#e5d7c6] bg-white px-4 py-3 outline-none focus:border-[#b5651d]"
+            className="flex-1 rounded-lg border border-[#e5d7c6] bg-white px-4 py-3 outline-none focus:border-[#b5651d] disabled:cursor-not-allowed disabled:opacity-60"
           />
           <button
             onClick={() => run()}
@@ -78,18 +79,24 @@ export default function Home() {
             <button
               key={ex.url}
               onClick={() => run(ex.url)}
-              className="rounded-full border border-[#e5d7c6] px-3 py-1 text-[#b5651d] hover:bg-white"
+              disabled={loading}
+              className="rounded-full border border-[#e5d7c6] px-3 py-1 text-[#b5651d] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {ex.label}
             </button>
           ))}
         </div>
 
+        {/* full-screen blur overlay — blocks edits while a lookup is running */}
         {loading && (
-          <p className="mt-6 rounded-lg bg-[#fff6e9] px-4 py-3 text-sm text-[#8a6a3a]">
-            Reading the Amazon product and searching the other platforms live… (a few
-            seconds — it fetches real pages, no API key).
-          </p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#faf7f2]/50 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-[#e5d7c6] bg-white/90 px-10 py-8 text-center shadow-xl">
+              <span className="h-9 w-9 animate-spin rounded-full border-[3px] border-[#e5d7c6] border-t-[#b5651d]" />
+              <p className="text-sm font-medium text-[#8a6a3a]">
+                Reading the Amazon product and searching the<br />other platforms live… a few seconds.
+              </p>
+            </div>
+          </div>
         )}
 
         {error && <p className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
