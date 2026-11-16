@@ -13,7 +13,50 @@
 import type { MatchResponse, Platform, PlatformResult, ProductIdentity } from "./types";
 import { CATEGORY_RULES, MATCH_THRESHOLD } from "./config";
 import { ADAPTERS } from "./adapters";
-import { bestMatch, otherColorInStock } from "./match/matcher";
+import { bestMatch, otherColorInStock, brandMatches, distinctiveCodes } from "./match/matcher";
+import { fetchReadable } from "./data/jina";
+import { fetchViaScraper } from "./data/scraper";
+
+/** Fetch a candidate's product-page text (Flipkart via Jina, others via ScraperAPI). */
+async function fetchPageText(platform: Platform, url: string): Promise<string> {
+  try {
+    return platform === "flipkart" ? await fetchReadable(url) : await fetchViaScraper(url, false);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Detail-page enrichment: the distinctive code (NU87, 025, 2M2) is often on the
+ * candidate's product PAGE even when the search-result title omits it. For the
+ * top brand-matching candidates, fetch the page and confirm every code is there.
+ * Bounded to 2 fetches so it stays within the function budget.
+ */
+async function enrichFromDetailPages(
+  identity: ProductIdentity,
+  platform: Platform,
+  candidates: Candidate[]
+): Promise<PlatformResult | null> {
+  const codes = distinctiveCodes(identity);
+  if (codes.length === 0) return null;
+  const pool = candidates.filter((c) => brandMatches(identity, c)).slice(0, 2);
+  for (const c of pool) {
+    const text = (await fetchPageText(platform, c.url)).toLowerCase();
+    if (text && codes.every((code) => text.includes(code))) {
+      return {
+        platform,
+        status: c.inStock ? "in_stock" : "out_of_stock",
+        url: c.url,
+        matchedTitle: c.title,
+        price: c.price,
+        confidence: 0.8,
+        reason: `matched via product-page details (found ${codes.join(", ")})`,
+        variantConfirmed: false,
+      };
+    }
+  }
+  return null;
+}
 import { isLLMEnabled, llmJudge } from "./match/llm";
 
 /** Run one platform end-to-end: search → match → decide. */
@@ -33,6 +76,9 @@ async function resolvePlatform(
     // with semantic (embedding) rescue when the lexical path misses.
     const match = await bestMatch(identity, candidates);
     if (!match || match.confidence < MATCH_THRESHOLD) {
+      // Before giving up, check candidate product pages for the distinctive code.
+      const enriched = await enrichFromDetailPages(identity, platform, candidates);
+      if (enriched) return enriched;
       const color = identity.attributes.color;
       const reason =
         color && otherColorInStock(identity, candidates)

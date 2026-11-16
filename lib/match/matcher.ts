@@ -299,6 +299,18 @@ function matchesModelIgnoringColor(target: ProductIdentity, c: Candidate): boole
   return tokenContainment(core.size ? core : modelToks, toks) >= 0.6;
 }
 
+/** Does this candidate's title contain the target brand? (exported for enrichment) */
+export function brandMatches(target: ProductIdentity, c: Candidate): boolean {
+  return brandOk(target, tokens(c.title));
+}
+
+/** Distinctive alphanumeric model codes (nu87, 2m2, 025, 18) — the tokens that
+ *  pin down identity and often live on the product PAGE even when the search
+ *  title omits them. Used by detail-page enrichment. */
+export function distinctiveCodes(target: ProductIdentity): string[] {
+  return [...tokens(target.model)].filter((t) => /\d/.test(t));
+}
+
 /**
  * Is the same model available IN STOCK in a DIFFERENT colour than requested?
  * Lets us tell the user "the black one is out of stock, but other colours are."
