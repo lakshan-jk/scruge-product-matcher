@@ -70,6 +70,34 @@ function candidateAttr(key: string, c: Candidate): string | null {
   return null;
 }
 
+// Accessory/decoy terms. A "Samsung Galaxy M36 Black Back Cover" contains the
+// brand, model AND colour, so it sails through brand/model/variant checks — but
+// it's a ₹200 case, not the phone. Reject these outright.
+const ACCESSORY =
+  /\b(case|cover|flip\s?cover|back\s?cover|back\s?panel|tempered\s?glass|screen\s?guard|screen\s?protector|protector|pouch|spareware|skin|sticker|decal|charger|cable|adapter|earphone|headphone|lace|laces|insole|wall\s?mount|bracket)\b/i;
+
+/** Parse "₹69,999" → 69999 (or null). */
+function priceNum(p?: string): number | null {
+  if (!p) return null;
+  const n = Number(p.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Is this candidate an obvious decoy (accessory, or priced far below the real
+ * product)? Returns a reason string if so. Used by BOTH the lexical and the
+ * semantic paths so neither can match a case/cover/spare part.
+ */
+function decoyReason(target: ProductIdentity, c: Candidate): string | null {
+  if (ACCESSORY.test(c.title)) return "looks like an accessory (case/cover/etc.), not the product";
+  const sp = priceNum(target.price);
+  const cp = priceNum(c.price);
+  if (sp && cp && cp < 0.3 * sp) {
+    return `price ${c.price} is far below the Amazon price ${target.price} — likely an accessory or different item`;
+  }
+  return null;
+}
+
 /** Brand must be present in the candidate title (hard requirement). */
 function brandOk(target: ProductIdentity, candTitleTokens: Set<string>): boolean {
   if (tokens(target.brand).size === 0) return true;
@@ -120,6 +148,12 @@ export function scoreCandidate(
   c: Candidate
 ): MatchScore {
   const candTitleTokens = tokens(c.title);
+
+  // --- decoy guard: accessories / far-cheaper items are not the product ---
+  const decoy = decoyReason(target, c);
+  if (decoy) {
+    return { candidate: c, confidence: 0, reason: decoy };
+  }
 
   // --- brand: must be present (hard requirement) ---
   if (!brandOk(target, candTitleTokens)) {
@@ -214,8 +248,9 @@ async function semanticRescue(
   if (!best || bestSim < EMBED_THRESHOLD) return null;
 
   // Precision guards still apply — embeddings widen recall, they don't relax
-  // brand identity or variant (colour/RAM/size) correctness.
+  // brand identity, decoy rejection, or variant (colour/RAM/size) correctness.
   const chosen: Candidate = best;
+  if (decoyReason(target, chosen)) return null;
   if (!brandOk(target, tokens(chosen.title))) return null;
   const v = variantCheck(target, chosen);
   if (!v.ok) return null;
