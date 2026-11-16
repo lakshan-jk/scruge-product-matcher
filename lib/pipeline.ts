@@ -10,7 +10,7 @@
 // (graceful degradation).
 // ============================================================
 
-import type { MatchResponse, Platform, PlatformResult, ProductIdentity } from "./types";
+import type { Candidate, MatchResponse, Platform, PlatformResult, ProductIdentity } from "./types";
 import { CATEGORY_RULES, MATCH_THRESHOLD } from "./config";
 import { ADAPTERS } from "./adapters";
 import { bestMatch, otherColorInStock, brandMatches, distinctiveCodes } from "./match/matcher";
