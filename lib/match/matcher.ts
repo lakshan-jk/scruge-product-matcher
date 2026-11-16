@@ -28,6 +28,7 @@ import {
   tokenContainment,
 } from "./normalize";
 import { isEmbedEnabled, embedTexts, embedImages, cosine } from "./embed";
+import { isLLMEnabled, llmPickMatch } from "./llm";
 
 // Generic descriptor words that bloat a model name and crush containment
 // ("teamLIGA Regular Fit Football Jersey" vs "Puma teamLIGA Jersey"). We match
@@ -436,11 +437,21 @@ export async function bestMatch(
   // Lexical path already confident → done (fast, no embedding call).
   if (top.confidence >= MATCH_THRESHOLD) return top;
 
-  // Lexical missed → try semantic (text) then visual (image) rescue.
-  // NOT for apparel (tshirt): plain tees/jerseys look and read nearly alike, so
-  // fuzzy rescue produces wrong matches (a generic Puma tee ≈ the teamLIGA
-  // jersey). There we require the distinctive text match and otherwise say
-  // "not listed" — a miss is far better than a confident wrong match.
+  // AI judge first — reasoning resolves aliases ("Man Utd" = "Manchester
+  // United") and rejects decoys (jersey ≠ tee), so it's safe for ALL categories,
+  // including apparel. It's the precision guard embeddings alone lacked.
+  if (isLLMEnabled()) {
+    const pick = await llmPickMatch(target, candidates);
+    if (pick) {
+      const c = candidates[pick.index];
+      if (!decoyReason(target, c)) {
+        return { candidate: c, confidence: 0.85, reason: `AI match: ${pick.reason}`, variantConfirmed: true };
+      }
+    }
+  }
+
+  // Then embeddings — semantic (text) + visual (image). NOT for apparel: plain
+  // tees/jerseys look/read alike, so fuzzy embedding rescue over-matches there.
   if (isEmbedEnabled() && target.category !== "tshirt") {
     const rescued = await semanticRescue(target, candidates);
     if (rescued && rescued.confidence > top.confidence) return rescued;

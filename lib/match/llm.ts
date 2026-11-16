@@ -47,6 +47,54 @@ function buildPrompt(target: ProductIdentity, c: Candidate): string {
   ].join("\n");
 }
 
+/**
+ * AI judge — pick the ONE candidate that is truly the same product, using the
+ * model's world knowledge. Resolves aliases/abbreviations ("Man Utd" =
+ * "Manchester United") and rejects decoys (a jersey ≠ a plain tee), which rules
+ * and embeddings can't. One call per platform; provider-agnostic (Groq / OpenAI
+ * / HuggingFace router / Ollama via LLM_BASE_URL). Returns null if unavailable.
+ */
+export async function llmPickMatch(
+  target: ProductIdentity,
+  candidates: Candidate[]
+): Promise<{ index: number; reason: string } | null> {
+  if (!isLLMEnabled() || candidates.length === 0) return null;
+  const list = candidates.slice(0, 15).map((c, i) => `${i}: ${c.title}`).join("\n");
+  const prompt = [
+    `You match products across shopping sites. From the CANDIDATES, pick the ONE that is the SAME product as the TARGET — same brand, model AND variant.`,
+    `Use world knowledge: treat aliases/abbreviations as equal (e.g. "Man Utd" = "Manchester United", "MUFC" = "Manchester United").`,
+    `But be STRICT about type and variant: a jersey is NOT a plain t-shirt; a case/cover/charger is NOT the device; different model numbers or sizes are different products (M36 ≠ A36, 3.0 ≠ 2.0, 43" ≠ 55", 128GB ≠ 256GB).`,
+    ``,
+    `TARGET: ${target.brand} ${target.model} (${target.category}) ${JSON.stringify(target.attributes)}`,
+    `Full title: ${target.title}`,
+    ``,
+    `CANDIDATES:`,
+    list,
+    ``,
+    `Respond ONLY with JSON: {"index": <number, or -1 if none truly match>, "reason": "short"}`,
+  ].join("\n");
+  try {
+    const res = await fetch(`${BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const parsed = JSON.parse(data?.choices?.[0]?.message?.content) as { index: number; reason: string };
+    const index = Number(parsed.index);
+    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) return null;
+    return { index, reason: String(parsed.reason ?? "AI judge") };
+  } catch {
+    return null;
+  }
+}
+
 /** Ask the LLM to confirm a single candidate. Returns null if LLM disabled or on error. */
 export async function llmJudge(
   target: ProductIdentity,
