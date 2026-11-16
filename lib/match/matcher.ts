@@ -98,6 +98,17 @@ function decoyReason(target: ProductIdentity, c: Candidate): string | null {
   return null;
 }
 
+/**
+ * The distinctive model identifier(s) must be present. Alphanumeric codes like
+ * "m36", "a55", "2m2", "15" carry the model's identity; generic words (galaxy,
+ * 5g, series) do not. Without this, "Galaxy A36" matches "Galaxy M36" because
+ * galaxy+5g alone clear the containment threshold.
+ */
+function modelIdentityOk(target: ProductIdentity, candTitleTokens: Set<string>): boolean {
+  const codes = [...tokens(target.model)].filter((t) => /\d/.test(t));
+  return codes.every((t) => candTitleTokens.has(t));
+}
+
 /** Brand must be present in the candidate title (hard requirement). */
 function brandOk(target: ProductIdentity, candTitleTokens: Set<string>): boolean {
   if (tokens(target.brand).size === 0) return true;
@@ -165,6 +176,10 @@ export function scoreCandidate(
   const modelScore = tokenContainment(tokens(target.model), candTitleTokens);
   if (modelScore < 0.6) {
     return { candidate: c, confidence: 0, reason: `model "${target.model}" doesn't match` };
+  }
+  // The model code itself (m36 vs a36) must match — not just galaxy+5g.
+  if (!modelIdentityOk(target, candTitleTokens)) {
+    return { candidate: c, confidence: 0, reason: `different model identifier (not "${target.model}")` };
   }
 
   // --- tier guard: "iPhone 15" must NOT match "iPhone 15 Pro Max" ---
@@ -251,7 +266,9 @@ async function semanticRescue(
   // brand identity, decoy rejection, or variant (colour/RAM/size) correctness.
   const chosen: Candidate = best;
   if (decoyReason(target, chosen)) return null;
-  if (!brandOk(target, tokens(chosen.title))) return null;
+  const chosenTokens = tokens(chosen.title);
+  if (!brandOk(target, chosenTokens)) return null;
+  if (!modelIdentityOk(target, chosenTokens)) return null; // M36 ≈ A36 by cosine — block it
   const v = variantCheck(target, chosen);
   if (!v.ok) return null;
 
