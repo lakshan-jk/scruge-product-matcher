@@ -232,6 +232,13 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
     llm ? llm.attributes : detectAttributes(category, title),
     title
   );
+  // TVs: the LLM often returns "resolution" and omits screenSize, leaving the
+  // variant guard unable to reject a 55" match for a 43" product. Backfill it
+  // from the title so size is always enforced.
+  if (category === "television" && !attributes.screenSize) {
+    const m = title.match(/(\d{2,3})\s*(?:inch|")/i);
+    if (m) attributes.screenSize = `${m[1]} inch`;
+  }
   // Query = brand + model (model is LLM-cleaned). We DON'T append the variant
   // attr — it skews search ranking toward other tiers (Plus/Pro); the matcher's
   // variant guard enforces the exact storage/colour afterwards.
