@@ -199,14 +199,20 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   let model = llm ? llm.model : detectModel(title, brand);
   // Brand sanity: the LLM sometimes grabs the model as the brand (e.g.
   // "teamLIGA" instead of "Puma"). If its brand isn't a known brand but a known
-  // one is in the title, use that and fold the mislabel back into the model so
-  // the distinctive token (teamLIGA) isn't lost from the search.
+  // one appears AS A WORD in the title, use that and fold the mislabel back into
+  // the model so the distinctive token (teamLIGA) isn't lost from the search.
   if (llm) {
-    const t = title.toLowerCase();
-    const known = BRANDS.find((b) => t.includes(b));
-    if (known && !BRANDS.includes(brand.toLowerCase())) {
-      model = `${brand} ${model}`.trim();
-      brand = known.charAt(0).toUpperCase() + known.slice(1);
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9&]/g, ""); // "Levi's"->"levis"
+    const brandKnown = BRANDS.some((b) => norm(b) === norm(brand));
+    if (!brandKnown) {
+      // whole-word match only — avoids "mi" matching inside "premium".
+      const known = BRANDS.find((b) =>
+        new RegExp(`(^|[^a-z0-9])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i").test(title)
+      );
+      if (known) {
+        model = `${brand} ${model}`.trim();
+        brand = known.charAt(0).toUpperCase() + known.slice(1);
+      }
     }
   }
   let category = llm ? llm.category : detectCategory(title, body, brand);
