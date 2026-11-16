@@ -39,10 +39,11 @@ function validateAmazonUrl(raw: unknown): string | null {
   }
   if (u.protocol !== "https:" && u.protocol !== "http:") return null;
 
-  // Host must BE an amazon domain (amazon.in, www.amazon.in, amazon.com, …),
-  // not merely contain the substring "amazon" somewhere in the URL.
+  // Host must END in amazon.in / amazon.com (optionally with a subdomain).
+  // Anchoring the TLD is critical: a loose "amazon\.[a-z.]+$" would also match
+  // a spoof like "amazon.in.evil.com", re-opening the SSRF. Whitelist TLDs.
   const host = u.hostname.toLowerCase();
-  if (!/(^|\.)amazon\.[a-z.]+$/.test(host)) return null;
+  if (!/^([a-z0-9-]+\.)*amazon\.(in|com)$/.test(host)) return null;
 
   // A genuine product link carries an ASIN. Requiring it also blocks
   // "amazon" as a bare word and arbitrary amazon-domain paths.
