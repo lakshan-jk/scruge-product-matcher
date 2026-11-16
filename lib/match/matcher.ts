@@ -424,8 +424,12 @@ export async function bestMatch(
   // Lexical path already confident → done (fast, no embedding call).
   if (top.confidence >= MATCH_THRESHOLD) return top;
 
-  // Lexical missed → try semantic (text) rescue, then visual (image) rescue.
-  if (isEmbedEnabled()) {
+  // Lexical missed → try semantic (text) then visual (image) rescue.
+  // NOT for apparel (tshirt): plain tees/jerseys look and read nearly alike, so
+  // fuzzy rescue produces wrong matches (a generic Puma tee ≈ the teamLIGA
+  // jersey). There we require the distinctive text match and otherwise say
+  // "not listed" — a miss is far better than a confident wrong match.
+  if (isEmbedEnabled() && target.category !== "tshirt") {
     const rescued = await semanticRescue(target, candidates);
     if (rescued && rescued.confidence > top.confidence) return rescued;
     const visual = await visualRescue(target, candidates);
