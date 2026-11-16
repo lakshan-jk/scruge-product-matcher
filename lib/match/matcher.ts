@@ -148,11 +148,22 @@ function brandOk(target: ProductIdentity, candTitleTokens: Set<string>): boolean
  * and it runs for BOTH the lexical and the semantic paths so embeddings can
  * never blur two variants into one.
  */
+// The attributes that actually define the variant a shopper cares about. Others
+// (e.g. phone RAM, which is fixed for a given model+storage and often absent from
+// store titles) are enforced-if-present but NOT required to "confirm" the variant.
+const PRIMARY_ATTRS: Record<Category, string[]> = {
+  smartphone: ["storage", "color"],
+  television: ["screenSize"],
+  sneaker: ["color"],
+  tshirt: ["color"],
+};
+
 function variantCheck(
   target: ProductIdentity,
   c: Candidate
-): { ok: boolean; matched: number; known: number; reason?: string } {
+): { ok: boolean; matched: number; known: number; matchedKeys: Set<string>; reason?: string } {
   const required = CATEGORY_RULES[target.category].requiredAttributes;
+  const matchedKeys = new Set<string>();
   let matched = 0;
   let known = 0;
   for (const key of required) {
@@ -167,17 +178,26 @@ function variantCheck(
       const ok = key === "color" ? colorsOverlap(want, got) : want === got;
       if (ok) {
         matched++;
+        matchedKeys.add(key);
       } else {
         return {
           ok: false,
           matched,
           known,
+          matchedKeys,
           reason: `${key} differs (wanted ${want}, got ${got}) — different variant`,
         };
       }
     }
   }
-  return { ok: true, matched, known };
+  return { ok: true, matched, known, matchedKeys };
+}
+
+/** Variant confirmed = every PRIMARY attr the target has was verified on the candidate. */
+function isVariantConfirmed(target: ProductIdentity, matchedKeys: Set<string>): boolean {
+  const primary = (PRIMARY_ATTRS[target.category] ?? []).filter((k) => target.attributes[k]);
+  if (primary.length === 0) return true; // nothing distinctive to confirm
+  return primary.every((k) => matchedKeys.has(k));
 }
 
 /** Score ONE candidate against the target identity (rule-based lexical path). */
@@ -248,10 +268,10 @@ export function scoreCandidate(
   const attrScore = required.length === 0 ? 1 : (v.known === 0 ? 0.5 : v.matched / v.known);
   const confidence = Number((0.25 + 0.4 * modelScore + 0.35 * attrScore).toFixed(2));
 
-  const variantConfirmed = required.length === 0 || v.known === required.length;
+  const variantConfirmed = isVariantConfirmed(target, v.matchedKeys);
   const reason = variantConfirmed
-    ? `brand, model and all required attributes match`
-    : `brand+model match; ${required.length - v.known} attr(s) unverified`;
+    ? `brand, model and key variant (${[...v.matchedKeys].join("+") || "n/a"}) match`
+    : `brand+model match; exact variant unconfirmed`;
 
   return { candidate: c, confidence: Math.min(confidence, 1), reason, variantConfirmed };
 }
@@ -326,8 +346,7 @@ async function semanticRescue(
   const v = variantCheck(target, chosen);
   if (!v.ok) return null;
 
-  const requiredLen = CATEGORY_RULES[target.category].requiredAttributes.length;
-  const variantConfirmed = requiredLen === 0 || v.known === requiredLen;
+  const variantConfirmed = isVariantConfirmed(target, v.matchedKeys);
   const confidence = Number(Math.min(0.6 + 0.4 * bestSim, 0.95).toFixed(2));
   return {
     candidate: chosen,
