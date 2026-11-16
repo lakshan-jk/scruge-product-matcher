@@ -237,6 +237,11 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
       }
     }
   }
+  // Trim descriptive clauses the LLM leaves on the model ("025 ... T-Shirt -
+  // Round Neck, Short Sleeves with Side Branding" → "025 ... T-Shirt"), which
+  // otherwise crush model containment against terse store titles.
+  model = model.split(/\s[-–—]\s|,/)[0].replace(/\s+/g, " ").trim();
+
   let category = llm ? llm.category : detectCategory(title, body, brand);
   // Guard: footwear/apparel brands don't make phones or TVs. If the LLM mislabels
   // a Nike/adidas/Skechers product as a phone (→ wrong store searched), trust the
