@@ -195,7 +195,20 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // fall back to heuristics if no LLM is configured or it fails.
   const llm = await llmExtract(title, body);
 
-  const brand = llm ? llm.brand : detectBrand(title);
+  let brand = llm ? llm.brand : detectBrand(title);
+  let model = llm ? llm.model : detectModel(title, brand);
+  // Brand sanity: the LLM sometimes grabs the model as the brand (e.g.
+  // "teamLIGA" instead of "Puma"). If its brand isn't a known brand but a known
+  // one is in the title, use that and fold the mislabel back into the model so
+  // the distinctive token (teamLIGA) isn't lost from the search.
+  if (llm) {
+    const t = title.toLowerCase();
+    const known = BRANDS.find((b) => t.includes(b));
+    if (known && !BRANDS.includes(brand.toLowerCase())) {
+      model = `${brand} ${model}`.trim();
+      brand = known.charAt(0).toUpperCase() + known.slice(1);
+    }
+  }
   let category = llm ? llm.category : detectCategory(title, body, brand);
   // Guard: footwear/apparel brands don't make phones or TVs. If the LLM mislabels
   // a Nike/adidas/Skechers product as a phone (→ wrong store searched), trust the
@@ -204,7 +217,6 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
     const heuristic = detectCategory(title, body, brand);
     if (heuristic === "sneaker" || heuristic === "tshirt") category = heuristic;
   }
-  const model = llm ? llm.model : detectModel(title, brand);
   // Attributes from the TITLE only — the page body has noise (e.g. "iCloud 50 GB")
   // that produces WRONG attributes → false variant-mismatches. Empty is safe.
   // Keep only attributes that actually appear in the title. A small LLM can

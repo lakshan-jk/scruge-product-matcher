@@ -76,10 +76,12 @@ function candidateAttr(key: string, c: Candidate): string | null {
 const ACCESSORY =
   /\b(case|cover|flip\s?cover|back\s?cover|back\s?panel|tempered\s?glass|screen\s?guard|screen\s?protector|protector|pouch|spareware|skin|sticker|decal|charger|cable|adapter|earphone|headphone|lace|laces|insole|wall\s?mount|bracket)\b/i;
 
-/** Parse "₹69,999" → 69999 (or null). */
+/** Parse "₹69,999" → 69999, "₹466.65" → 467 (or null). Handles decimals + commas. */
 function priceNum(p?: string): number | null {
   if (!p) return null;
-  const n = Number(p.replace(/[^\d]/g, ""));
+  const m = p.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const n = Math.round(parseFloat(m[0]));
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
