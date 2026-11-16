@@ -17,7 +17,11 @@ import { extractFromAmazon } from "@/lib/extract/amazon";
 export const maxDuration = 60;
 import { matchAcrossPlatforms } from "@/lib/pipeline";
 import { cacheGet, cacheSet, cacheKeyForAmazon } from "@/lib/data/cache";
+import { resetQuotaFlag, isQuotaExhausted } from "@/lib/data/scraper";
 import type { MatchResponse } from "@/lib/types";
+
+const QUOTA_NOTICE =
+  "⚠ Our live-data quota is exhausted for now, so Myntra/Croma results may be limited (Flipkart still works). Full results resume when the quota resets.";
 
 const MAX_URL_LEN = 2048;
 
@@ -100,14 +104,23 @@ export async function POST(req: Request) {
     }
 
     // 2. Miss → resolve live.
+    resetQuotaFlag();
     const identity = await extractFromAmazon(url);
     const result = await matchAcrossPlatforms(identity);
 
-    // 3. Store for next time.
-    cacheSet(key, result);
+    // 3. Store for next time (don't cache a quota-degraded result).
+    const notice = isQuotaExhausted() ? QUOTA_NOTICE : undefined;
+    if (!notice) cacheSet(key, result);
 
-    return NextResponse.json({ ...result, cached: false });
+    return NextResponse.json({ ...result, notice, cached: false });
   } catch (err) {
+    // If the whole lookup failed because the scraping quota is gone, say so clearly.
+    if (isQuotaExhausted()) {
+      return NextResponse.json(
+        { error: "Live-data quota is exhausted right now. Please try again after it resets." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Something went wrong." },
       { status: 500 }

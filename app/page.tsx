@@ -101,6 +101,10 @@ export default function Home() {
 
         {error && <p className="mt-6 rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
+        {data?.notice && (
+          <p className="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">{data.notice}</p>
+        )}
+
         {/* source product */}
         {data && (
           <div className="mt-8">

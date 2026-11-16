@@ -65,4 +65,5 @@ export interface MatchResponse {
   source: ProductIdentity;
   results: PlatformResult[];
   cached?: boolean;   // true when served from cache (no live scrape)
+  notice?: string;    // e.g. scraping-quota-exhausted banner for the UI
 }

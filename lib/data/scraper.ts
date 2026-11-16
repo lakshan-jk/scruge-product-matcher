@@ -18,6 +18,17 @@ export function isScraperEnabled(): boolean {
   return Boolean(API_KEY);
 }
 
+// Set when ScraperAPI reports the account is out of credits (HTTP 403). Reset
+// at the start of each request so the UI can show a clear "quota exhausted"
+// notice instead of a confusing generic error.
+let quotaExhausted = false;
+export function resetQuotaFlag(): void {
+  quotaExhausted = false;
+}
+export function isQuotaExhausted(): boolean {
+  return quotaExhausted;
+}
+
 /** Fetch a URL through ScraperAPI (render=true = execute JS). Returns HTML. */
 export async function fetchViaScraper(url: string, render = true): Promise<string> {
   if (!API_KEY) throw new Error("SCRAPER_API_KEY not set");
@@ -32,6 +43,7 @@ export async function fetchViaScraper(url: string, render = true): Promise<strin
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(endpoint, { signal: controller.signal });
+    if (res.status === 403) quotaExhausted = true; // out of credits
     if (!res.ok) throw new Error(`scraperapi ${res.status}`);
     const html = await res.text();
     cache.set(cacheKey, html);
@@ -51,6 +63,7 @@ export async function fetchAmazonStructured(asin: string): Promise<Record<string
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(endpoint, { signal: controller.signal });
+    if (res.status === 403) quotaExhausted = true; // out of credits
     if (!res.ok) return null;
     return (await res.json()) as Record<string, unknown>;
   } catch {
