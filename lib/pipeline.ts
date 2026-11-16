@@ -13,7 +13,7 @@
 import type { MatchResponse, Platform, PlatformResult, ProductIdentity } from "./types";
 import { CATEGORY_RULES, MATCH_THRESHOLD } from "./config";
 import { ADAPTERS } from "./adapters";
-import { bestMatch } from "./match/matcher";
+import { bestMatch, otherColorInStock } from "./match/matcher";
 import { isLLMEnabled, llmJudge } from "./match/llm";
 
 /** Run one platform end-to-end: search → match → decide. */
@@ -33,11 +33,14 @@ async function resolvePlatform(
     // with semantic (embedding) rescue when the lexical path misses.
     const match = await bestMatch(identity, candidates);
     if (!match || match.confidence < MATCH_THRESHOLD) {
-      return {
-        platform,
-        status: "not_listed",
-        reason: match ? `best match too weak (${match.confidence}) — ${match.reason}` : "no match",
-      };
+      const color = identity.attributes.color;
+      const reason =
+        color && otherColorInStock(identity, candidates)
+          ? `The ${color} variant isn't listed — other colours are in stock.`
+          : match
+            ? `best match too weak (${match.confidence}) — ${match.reason}`
+            : "no match";
+      return { platform, status: "not_listed", reason };
     }
 
     // Stage 2b: optional LLM verification of the top candidate.
@@ -58,6 +61,15 @@ async function resolvePlatform(
     }
 
     // Confident match → report stock from the matched listing.
+    // Colour-aware out-of-stock message: if the requested colour's listing is
+    // sold out, say so — and whether other colours are still available.
+    const color = identity.attributes.color;
+    let finalReason = reason;
+    if (!match.candidate.inStock && color) {
+      finalReason = `The ${color} variant is out of stock${
+        otherColorInStock(identity, candidates) ? " — other colours are in stock" : ""
+      }.`;
+    }
     return {
       platform,
       status: match.candidate.inStock ? "in_stock" : "out_of_stock",
@@ -65,7 +77,7 @@ async function resolvePlatform(
       matchedTitle: match.candidate.title,
       price: match.candidate.price,
       confidence,
-      reason,
+      reason: finalReason,
       variantConfirmed: match.variantConfirmed,
     };
   } catch (err) {

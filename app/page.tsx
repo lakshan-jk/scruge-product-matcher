@@ -149,6 +149,9 @@ export default function Home() {
                         confirmed — stock may be for a different variant.
                       </p>
                     )}
+                    {r.status === "out_of_stock" && r.reason && (
+                      <p className="mt-1 text-sm font-medium text-amber-700">{r.reason}</p>
+                    )}
                     {r.url && (
                       <a href={r.url} target="_blank" rel="noreferrer"
                          className="mt-1 inline-block text-sm text-[#b5651d] underline">

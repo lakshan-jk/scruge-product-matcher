@@ -264,6 +264,30 @@ function colorsOverlap(a: string, b: string): boolean {
   return ca.some((c) => cb.includes(c));
 }
 
+/** Does `c` match the target's brand + model (ignoring colour)? */
+function matchesModelIgnoringColor(target: ProductIdentity, c: Candidate): boolean {
+  if (decoyReason(target, c)) return false;
+  const toks = tokens(c.title);
+  if (!brandOk(target, toks) || !modelIdentityOk(target, toks, c.title)) return false;
+  const modelToks = tokens(target.model);
+  const core = new Set([...modelToks].filter((t) => !MODEL_STOPWORDS.has(t)));
+  return tokenContainment(core.size ? core : modelToks, toks) >= 0.6;
+}
+
+/**
+ * Is the same model available IN STOCK in a DIFFERENT colour than requested?
+ * Lets us tell the user "the black one is out of stock, but other colours are."
+ */
+export function otherColorInStock(target: ProductIdentity, candidates: Candidate[]): boolean {
+  const want = target.attributes.color ? normalizeAttribute("color", target.attributes.color) : null;
+  if (!want) return false;
+  return candidates.some((c) => {
+    if (!c.inStock || !matchesModelIgnoringColor(target, c)) return false;
+    const got = candidateAttr("color", c);
+    return got != null && !colorsOverlap(want, got);
+  });
+}
+
 // Minimum cosine to accept a semantic (embedding) match before variant checks.
 const EMBED_THRESHOLD = 0.82;
 
