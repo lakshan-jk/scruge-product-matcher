@@ -44,6 +44,37 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
   }
 }
 
+const CLIP_MODEL = process.env.CLIP_MODEL ?? "jina-clip-v2";
+
+/**
+ * Embed a batch of IMAGE URLs with a CLIP model → one vector each (same space
+ * as text, so images are directly comparable). Null on failure / if disabled.
+ * This is the visual-matching layer: same product = same photo = high cosine,
+ * even when the titles share no words.
+ */
+export async function embedImages(urls: string[]): Promise<(number[] | null)[] | null> {
+  if (!isEmbedEnabled() || urls.length === 0) return null;
+  try {
+    const res = await fetch(`${BASE_URL}/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify({ model: CLIP_MODEL, input: urls.map((u) => ({ image: u })) }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const arr = data?.data;
+    if (!Array.isArray(arr)) return null;
+    // Map back by index; Jina preserves order and drops nothing on success.
+    const out: (number[] | null)[] = urls.map(() => null);
+    arr.forEach((d: { index?: number; embedding: number[] }, i: number) => {
+      out[typeof d.index === "number" ? d.index : i] = d.embedding;
+    });
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /** Cosine similarity of two equal-length vectors → -1..1. */
 export function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;

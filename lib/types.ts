@@ -30,6 +30,7 @@ export interface ProductIdentity {
   sourceUrl: string;
   price?: string;     // the Amazon price, for comparison
   searchQuery?: string; // clean query for searching other platforms (LLM-cleaned)
+  imageUrl?: string;  // Amazon product image — for visual (CLIP) matching
 }
 
 /** A raw candidate a platform adapter returns from its search. */
@@ -41,6 +42,7 @@ export interface Candidate {
   // adapters fill whatever structured attrs they can; the matcher
   // falls back to parsing the title when these are missing.
   attributes?: Record<string, string>;
+  imageUrl?: string;       // listing thumbnail — for visual (CLIP) matching
 }
 
 /** The result we show for ONE platform. */

@@ -43,6 +43,7 @@ export async function searchMyntra(query: string): Promise<Candidate[]> {
     inStock: true, // listed in search results = available on Myntra
     price: p.price != null ? `₹${Number(p.price).toLocaleString("en-IN")}` : undefined,
     attributes: p.product ? { color: extractColor(p.product) } : undefined,
+    imageUrl: typeof p.searchImage === "string" ? p.searchImage : undefined, // for visual match
   }));
 }
 

@@ -27,7 +27,7 @@ import {
   tokens,
   tokenContainment,
 } from "./normalize";
-import { isEmbedEnabled, embedTexts, cosine } from "./embed";
+import { isEmbedEnabled, embedTexts, embedImages, cosine } from "./embed";
 
 // Generic descriptor words that bloat a model name and crush containment
 // ("teamLIGA Regular Fit Football Jersey" vs "Puma teamLIGA Jersey"). We match
@@ -315,7 +315,54 @@ async function semanticRescue(
   };
 }
 
-/** Pick the best-scoring candidate (Stage 2 result), with semantic recall rescue. */
+// Minimum image cosine to accept a visual match. High, because product photos
+// (esp. plain apparel on white) look alike; distinctive items (shoes, patterned
+// goods, electronics) separate well above this.
+const VISUAL_THRESHOLD = 0.85;
+
+/**
+ * Visual rescue — the last resort when text can't help (same product, totally
+ * different titles, e.g. "Levi's 025" vs "Levis Men Black Tee"). Compare the
+ * Amazon product photo to each candidate photo with CLIP; the one whose image
+ * matches wins. Brand + decoy guards still apply so we never cross brands.
+ */
+async function visualRescue(
+  target: ProductIdentity,
+  candidates: Candidate[]
+): Promise<MatchScore | null> {
+  if (!target.imageUrl) return null;
+  const pool = candidates
+    .filter((c) => c.imageUrl && !decoyReason(target, c) && brandOk(target, tokens(c.title)))
+    .slice(0, 8);
+  if (pool.length === 0) return null;
+
+  const vecs = await embedImages([target.imageUrl, ...pool.map((c) => c.imageUrl!)]);
+  if (!vecs || !vecs[0]) return null;
+  const tv = vecs[0];
+
+  let best: Candidate | null = null;
+  let bestSim = 0;
+  pool.forEach((c, i) => {
+    const v = vecs[i + 1];
+    if (!v) return;
+    const sim = cosine(tv, v);
+    if (sim > bestSim) {
+      bestSim = sim;
+      best = c;
+    }
+  });
+  if (!best || bestSim < VISUAL_THRESHOLD) return null;
+
+  const confidence = Number(Math.min(0.55 + 0.4 * bestSim, 0.95).toFixed(2));
+  return {
+    candidate: best,
+    confidence,
+    reason: `visual match (image cosine ${bestSim.toFixed(2)})`,
+    variantConfirmed: bestSim >= 0.9, // a near-identical photo implies the exact variant
+  };
+}
+
+/** Pick the best-scoring candidate (Stage 2 result), with semantic + visual rescue. */
 export async function bestMatch(
   target: ProductIdentity,
   candidates: Candidate[]
@@ -329,10 +376,12 @@ export async function bestMatch(
   // Lexical path already confident → done (fast, no embedding call).
   if (top.confidence >= MATCH_THRESHOLD) return top;
 
-  // Lexical missed → try semantic rescue (if embeddings are configured).
+  // Lexical missed → try semantic (text) rescue, then visual (image) rescue.
   if (isEmbedEnabled()) {
     const rescued = await semanticRescue(target, candidates);
     if (rescued && rescued.confidence > top.confidence) return rescued;
+    const visual = await visualRescue(target, candidates);
+    if (visual && visual.confidence > top.confidence) return visual;
   }
   return top;
 }

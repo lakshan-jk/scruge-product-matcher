@@ -40,6 +40,14 @@ export function parseCandidates(markdown: string, platform: Platform): Candidate
     if (!priceMap.has(id)) priceMap.set(id, m[1].replace(/\s/g, ""));
   }
 
+  // Image map: cards render as [![alt](IMAGE)](PRODUCT). Key image by product id
+  // so each candidate carries its photo for visual (CLIP) matching.
+  const imageMap = new Map<string, string>();
+  for (const m of markdown.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)\]\((https?:\/\/[^)]+)\)/g)) {
+    const id = idOf(m[2]);
+    if (!imageMap.has(id)) imageMap.set(id, m[1].split(" ")[0]);
+  }
+
   // all product URLs with their position
   const urls = [...markdown.matchAll(PRODUCT_URL[platform])].map((m) => ({
     url: m[0].split("?")[0],
@@ -67,7 +75,7 @@ export function parseCandidates(markdown: string, platform: Platform): Candidate
     const price = priceMap.get(idOf(u.url)) ?? blockPrice;
 
     seen.add(u.url);
-    candidates.push({ title, url: u.url, inStock, price });
+    candidates.push({ title, url: u.url, inStock, price, imageUrl: imageMap.get(idOf(u.url)) });
     if (candidates.length >= 40) break;
   }
 

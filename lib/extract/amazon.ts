@@ -124,7 +124,7 @@ function amazonTitleFromHtml(html: string): string {
 
 /** Fetch Amazon product data: ScraperAPI STRUCTURED endpoint (clean name + price +
  *  stock as JSON) → raw HTML → Jina. First that returns a good title wins. */
-async function fetchAmazon(url: string): Promise<{ title: string; body: string; price?: string; brand?: string }> {
+async function fetchAmazon(url: string): Promise<{ title: string; body: string; price?: string; brand?: string; imageUrl?: string }> {
   const asin = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i)?.[1];
 
   // 1. Structured endpoint — cleanest: name, pricing, specs, availability.
@@ -138,7 +138,10 @@ async function fetchAmazon(url: string): Promise<{ title: string; body: string; 
       // Amazon's byline brand, e.g. "Visit the PUMA Store" — authoritative even
       // when the brand name is absent from the product title.
       const brand = typeof p?.brand === "string" ? p.brand : undefined;
-      return { title: name, body: `${name}\n${bullets}\n${info}`, price, brand };
+      // Product image — for visual (CLIP) matching across platforms.
+      const imgs = (p?.images ?? p?.high_res_images) as unknown;
+      const imageUrl = Array.isArray(imgs) && typeof imgs[0] === "string" ? imgs[0] : undefined;
+      return { title: name, body: `${name}\n${bullets}\n${info}`, price, brand, imageUrl };
     }
   }
 
@@ -204,7 +207,7 @@ function extractAmazonPrice(text: string): string | undefined {
 export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // Jina first (free); ScraperAPI fallback if Jina is blocked/503'd. Throws a
   // clear message if both fail — better than matching a garbage error page.
-  const { title, body, price: srcPrice, brand: srcBrandRaw } = await fetchAmazon(url);
+  const { title, body, price: srcPrice, brand: srcBrandRaw, imageUrl } = await fetchAmazon(url);
 
   // Prefer the LLM for clean extraction (handles messy SEO titles);
   // fall back to heuristics if no LLM is configured or it fails.
@@ -275,5 +278,5 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   // but the actual product price repeats the most → pick the MOST FREQUENT.
   const price = srcPrice ?? extractAmazonPrice(body);
 
-  return { brand, model, category, attributes, title: sanitizeTitle(title), sourceUrl: url, price, searchQuery };
+  return { brand, model, category, attributes, title: sanitizeTitle(title), sourceUrl: url, price, searchQuery, imageUrl };
 }
