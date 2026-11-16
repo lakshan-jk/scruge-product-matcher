@@ -134,7 +134,17 @@ async function fetchAmazon(url: string): Promise<{ title: string; body: string; 
     if (name && !ERROR_PAGE.test(name)) {
       const bullets = Array.isArray(p?.feature_bullets) ? p!.feature_bullets.join(" ") : "";
       const info = p?.product_information ? JSON.stringify(p.product_information) : "";
-      const price = typeof p?.pricing === "string" ? p.pricing.replace(/\s/g, "") : undefined;
+      let price = typeof p?.pricing === "string" ? p.pricing.replace(/\s/g, "") : undefined;
+      // The structured endpoint omits price for some items. Fall back to the raw
+      // HTML (where the price element lives) so the Amazon price is never blank.
+      if (!price) {
+        try {
+          const html = await fetchViaScraper(url, false);
+          price = extractAmazonPrice(html);
+        } catch {
+          /* leave price undefined */
+        }
+      }
       // Amazon's byline brand, e.g. "Visit the PUMA Store" — authoritative even
       // when the brand name is absent from the product title.
       const brand = typeof p?.brand === "string" ? p.brand : undefined;
@@ -268,6 +278,13 @@ export async function extractFromAmazon(url: string): Promise<ProductIdentity> {
   if (category === "television" && !attributes.screenSize) {
     const m = title.match(/(\d{2,3})\s*(?:inch|")/i);
     if (m) attributes.screenSize = `${m[1]} inch`;
+  }
+  // Phones: the LLM often omits RAM, leaving the variant only partly verified
+  // ("1 attr unverified"). Backfill RAM from the title so the exact variant
+  // (RAM + storage + colour) is fully confirmed when present.
+  if (category === "smartphone" && !attributes.ram) {
+    const m = title.match(/(\d+)\s*gb\s*ram/i);
+    if (m) attributes.ram = `${m[1]}GB`;
   }
   // Query = brand + model (model is LLM-cleaned). We DON'T append the variant
   // attr — it skews search ranking toward other tiers (Plus/Pro); the matcher's
