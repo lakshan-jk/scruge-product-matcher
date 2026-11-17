@@ -88,7 +88,7 @@ function candidateAttr(key: string, c: Candidate): string | null {
 // brand, model AND colour, so it sails through brand/model/variant checks — but
 // it's a ₹200 case, not the phone. Reject these outright.
 const ACCESSORY =
-  /\b(case|cover|flip\s?cover|back\s?cover|back\s?panel|tempered\s?glass|screen\s?guard|screen\s?protector|protector|pouch|spareware|skin|sticker|decal|charger|cable|adapter|earphone|headphone|lace|laces|insole|wall\s?mount|bracket)\b/i;
+  /\b(case|cover|flip\s?cover|back\s?cover|back\s?panel|tempered\s?glass|screen\s?guard|screen\s?protector|protector|pouch|spareware|skin|sticker|decal|charger|cable|adapter|earphone|headphone|lace|laces|insole|wall\s?mount|ceiling\s?mount|bracket|remote|remote\s?control|trolley|hdmi)\b/i;
 
 /** Parse "₹69,999" → 69999, "₹466.65" → 467 (or null). Handles decimals + commas. */
 function priceNum(p?: string): number | null {
