@@ -14,7 +14,7 @@ import { fetchReadable, searchUrl } from "../data/jina";
 import { parseCandidates } from "../data/parse";
 import { isScraperEnabled } from "../data/scraper";
 import { searchMyntra } from "./myntra";
-import { searchCroma } from "./croma";
+import { searchCroma, searchCromaViaJina } from "./croma";
 
 export interface PlatformAdapter {
   platform: Platform;
@@ -63,13 +63,22 @@ export const ADAPTERS: Record<Platform, PlatformAdapter> = {
       }),
   },
 
-  // Croma — ScraperAPI best-effort (client-side grid; may be empty → fallback).
+  // Croma — ScraperAPI PRIMARY; free Jina browser render as fallback (saves
+  // credits / survives quota exhaustion); mock as last resort.
   croma: {
     platform: "croma",
     search: (identity) =>
       withFallback(identity, "croma", async () => {
-        if (!isScraperEnabled()) return mockSearch(identity, "croma");
-        return searchCroma(queryFor(identity));
+        const q = queryFor(identity);
+        if (isScraperEnabled()) {
+          try {
+            const got = await searchCroma(q);
+            if (got.length > 0) return got;
+          } catch {
+            /* fall through to free Jina */
+          }
+        }
+        return searchCromaViaJina(q); // free parachute
       }),
   },
 };

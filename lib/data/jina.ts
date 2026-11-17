@@ -14,24 +14,26 @@ const TIMEOUT_MS = 30_000;
 // tiny in-memory cache so repeat lookups in a session don't refetch
 const cache = new Map<string, string>();
 
-export async function fetchReadable(url: string): Promise<string> {
-  if (cache.has(url)) return cache.get(url)!;
+export async function fetchReadable(url: string, engine: "direct" | "browser" = "direct"): Promise<string> {
+  const cacheKey = `${engine}:${url}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  // Browser render is slower — give it more room.
+  const timer = setTimeout(() => controller.abort(), engine === "browser" ? 55_000 : TIMEOUT_MS);
   try {
     const res = await fetch(JINA + url, {
       signal: controller.signal,
       headers: {
         "X-Return-Format": "markdown",
-        // raw-HTML fetch instead of a headless browser render → ~3-4x faster.
-        // These e-commerce search pages are server-rendered, so content is intact.
-        "X-Engine": "direct",
+        // "direct" = raw-HTML (fast, server-rendered pages). "browser" = full JS
+        // render — needed for edge-protected grids (Croma) that block direct.
+        "X-Engine": engine,
       },
     });
     if (!res.ok) throw new Error(`reader ${res.status}`);
     const text = await res.text();
-    cache.set(url, text);
+    cache.set(cacheKey, text);
     return text;
   } finally {
     clearTimeout(timer);

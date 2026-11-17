@@ -7,9 +7,23 @@
 // ============================================================
 
 import type { Candidate } from "../types";
+import { fetchReadable, searchUrl } from "../data/jina";
+import { parseCandidates } from "../data/parse";
 
 const KEY = process.env.SCRAPER_API_KEY;
 const TIMEOUT_MS = 40_000;
+
+/**
+ * FREE fallback for Croma via Jina's browser engine. Croma's grid is edge-
+ * protected against direct fetches, but Jina's headless render gets through —
+ * so when ScraperAPI is empty or out of credits, we still get Croma results at
+ * zero ScraperAPI cost. ScraperAPI stays primary; this is the parachute.
+ */
+export async function searchCromaViaJina(query: string): Promise<Candidate[]> {
+  const md = await fetchReadable(searchUrl("croma", query), "browser");
+  // Rendered page carries title, image AND the per-product price — full details.
+  return parseCandidates(md, "croma");
+}
 
 export async function searchCroma(query: string): Promise<Candidate[]> {
   if (!KEY) return [];
