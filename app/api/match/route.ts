@@ -45,17 +45,42 @@ function validateAmazonUrl(raw: unknown): string | null {
   }
   if (u.protocol !== "https:" && u.protocol !== "http:") return null;
 
-  // Host must END in amazon.in / amazon.com (optionally with a subdomain).
-  // Anchoring the TLD is critical: a loose "amazon\.[a-z.]+$" would also match
-  // a spoof like "amazon.in.evil.com", re-opening the SSRF. Whitelist TLDs.
+  // Host must END in amazon.in / amazon.com (optionally with a subdomain), OR be
+  // an Amazon short-link domain (amzn.in / amzn.to / a.co). Anchoring the TLD is
+  // critical: a loose "amazon\.[a-z.]+$" would also match a spoof like
+  // "amazon.in.evil.com", re-opening the SSRF. Whitelist TLDs.
   const host = u.hostname.toLowerCase();
-  if (!/^([a-z0-9-]+\.)*amazon\.(in|com)$/.test(host)) return null;
+  const isAmazon = /^([a-z0-9-]+\.)*amazon\.(in|com)$/.test(host);
+  const isShort = /^(amzn\.in|amzn\.to|a\.co)$/.test(host);
+  if (!isAmazon && !isShort) return null;
 
-  // A genuine product link carries an ASIN. Requiring it also blocks
-  // "amazon" as a bare word and arbitrary amazon-domain paths.
-  if (!/\/(?:dp|gp\/product)\/[A-Z0-9]{10}/i.test(u.pathname)) return null;
+  // Full links must carry an ASIN; short links just need a non-empty path
+  // (they'll be resolved to the full URL before use).
+  if (isAmazon && !/\/(?:dp|gp\/product)\/[A-Z0-9]{10}/i.test(u.pathname)) return null;
+  if (isShort && u.pathname.length < 2) return null;
 
   return s;
+}
+
+/** Follow an Amazon short link (amzn.in/d/...) to its full product URL. */
+async function resolveShortLink(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    const res = await fetch(url, { redirect: "follow", signal: controller.signal });
+    clearTimeout(timer);
+    return res.url || null; // final URL after redirects
+  } catch {
+    return null;
+  }
+}
+
+function isShortLink(url: string): boolean {
+  try {
+    return /^(amzn\.in|amzn\.to|a\.co)$/.test(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 // Best-effort per-IP rate limit. NOTE: serverless memory is per-instance, so
@@ -90,12 +115,26 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const url = validateAmazonUrl(body?.url);
+    let url = validateAmazonUrl(body?.url);
     if (!url) {
       return NextResponse.json(
         { error: "Please provide a valid Amazon product URL (e.g. https://www.amazon.in/dp/XXXXXXXXXX)." },
         { status: 400 }
       );
+    }
+
+    // Short link (amzn.in/d/...) → follow the redirect to the full product URL,
+    // then re-validate (so SSRF guards still apply to the resolved target).
+    if (isShortLink(url)) {
+      const resolved = await resolveShortLink(url);
+      const full = resolved ? validateAmazonUrl(resolved) : null;
+      if (!full || isShortLink(full)) {
+        return NextResponse.json(
+          { error: "Couldn't resolve that short link to an Amazon product. Please paste the full product URL." },
+          { status: 400 }
+        );
+      }
+      url = full;
     }
 
     // 1. Cache-first — skip the scrape if we've seen this product recently.
