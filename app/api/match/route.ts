@@ -32,8 +32,10 @@ const MAX_URL_LEN = 2048;
  */
 function validateAmazonUrl(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
-  const s = raw.trim();
-  if (s.length === 0 || s.length > MAX_URL_LEN) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_URL_LEN) return null;
+  // Accept URLs pasted without a scheme ("amazon.in/dp/XXXX" → add https://).
+  const s = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
   let u: URL;
   try {
